@@ -99,13 +99,13 @@ The game should closely mimic the classic Pac-Man look and feel (grid layout, pe
 
 ## 5. Milestones
 
-### Milestone 1 — Basic Map & Player Movement
+### Milestone 1 — Basic Map & Player Movement — DONE
 
 * Load map from 2D array or `.tmx` file.
 * Draw walls, pellets, empty space.
 * Move player with arrow keys; stop at walls.
 
-### Milestone 2 — Pellets & Scoring
+### Milestone 2 — Pellets & Scoring — DONE
 
 * Detect pellet collision.
 * Increase score; remove pellet from map.
@@ -155,7 +155,7 @@ The game should closely mimic the classic Pac-Man look and feel (grid layout, pe
 - **Player Movement**: Grid-based movement with queued direction and cell-center turns. Wall collision enforced. Wrap-around horizontally. Current speed: fast (480 px/s at 60 UPS).
 - **Input**: Arrow keys to move, `Space` to pause, `F` to toggle fullscreen, `Q` to quit.
 - **Scoring**: Pellets +10, Power Pellets +50. HUD shows Score top-left.
-- **Project Structure**: `main.go`, `pkg/game`, `pkg/entities`, `pkg/tilemap`, `pkg/ui`, `assets/` directories created.
+- **Project Structure**: `cmd/pacman`, `internal/game`, `internal/entities`, `internal/tilemap`, `internal/ui`, `assets/` directories.
 - **Build tooling**: Makefile with `deps`, `build`, `run`, `test`, `release` targets. Unit tests added for entities, tilemap, and basic game constraints.
 
 ### Next Up

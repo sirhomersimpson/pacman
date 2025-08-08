@@ -9,6 +9,8 @@ import (
 )
 
 func TestGameDrawDoesNotPanic(t *testing.T) {
+	// Disable audio in tests to avoid global context conflicts
+	t.Setenv("PACMAN_DISABLE_AUDIO", "1")
 	t.Setenv("PACMAN_CONFIG_DIR", t.TempDir())
 	g := New()
 	screen := ebiten.NewImage(g.ScreenWidth(), g.ScreenHeight())

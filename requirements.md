@@ -61,7 +61,7 @@ The game should closely mimic the classic Pac-Man look and feel (grid layout, pe
    * HUD showing:
 
      * Score
-     * High score
+     * High score (with player name)
      * Lives remaining
      * Level icons
    * Center "READY!" text at start.
@@ -70,7 +70,8 @@ The game should closely mimic the classic Pac-Man look and feel (grid layout, pe
 
    * All assets must be CC0 or custom-made.
    * Sprites for player, ghosts, pellets, fruits, walls.
-   * Sound effects for pellet eat, power-up, ghost eaten, death.
+    * Sound effects for pellet eat, power-up, ghost eaten, death.
+    * Audio disabled by default; enable with `PACMAN_ENABLE_AUDIO=1`.
 
 ---
 
@@ -165,12 +166,15 @@ The game should closely mimic the classic Pac-Man look and feel (grid layout, pe
   - Score combo system: 200/400/800/1600 points for consecutive ghost eating
   - Eaten ghosts return to ghost house
   - Timer correctly expires and returns ghosts to normal state
-- **Input**: Arrow keys to move, `Space` to pause, `F` to toggle fullscreen, `Q` to quit.
+- **Input**: Arrow keys to move, `Space` to pause, `F` to toggle fullscreen, `Q` to quit, `S` to toggle leaderboard.
 - **Scoring**: Pellets +10, Power Pellets +50, Frightened ghosts 200-1600 (combo).
 - **HUD**: 
-  - Score, Lives, and FPS counter in top-left
+  - Score, High score (with owner), Lives, and FPS counter in top-left
   - Frightened mode countdown timer in bottom-right (shows remaining seconds)
 - **Project Structure**: `cmd/pacman`, `internal/game`, `internal/entities`, `internal/tilemap`, `internal/ui`, `assets/` directories.
+  - High score persistence stored in JSON at UserConfigDir (`highscore.json`) with legacy fallback.
+  - Leaderboard UI shown on game over or before exit (press `Q` twice to quit when shown).
+  - Name entry on startup; high scores stored per player.
 - **Build tooling**: Makefile with `deps`, `build`, `run`, `test`, `release` targets. Unit tests for entities, tilemap, game logic, and frightened mode timer.
 
 ### Technical Details
@@ -183,5 +187,3 @@ The game should closely mimic the classic Pac-Man look and feel (grid layout, pe
 ### Next Up
 - Ghost AI with pathfinding (Milestone 4) - Implement chase/scatter modes
 - Fruits and level progression (Milestone 6)
-- High score persistence
-- Sound effects integration

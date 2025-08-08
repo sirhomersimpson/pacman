@@ -5,6 +5,7 @@ import (
 	"image/color"
 	"math"
 	"math/rand"
+	"strings"
 	"time"
 
 	"pacman/internal/entities"
@@ -45,6 +46,9 @@ type Game struct {
 	tickCounter         int
 	frightenedUntilTick int
 	ghostEatCombo       int
+	audio               *AudioManager
+	easterMessage       string
+	easterUntilTick     int
 }
 
 func New() *Game {
@@ -88,6 +92,8 @@ func New() *Game {
 	if g.scale <= 0 || math.IsNaN(g.scale) || math.IsInf(g.scale, 0) {
 		g.scale = 1.0
 	}
+	// Init audio (graceful if files missing)
+	g.audio = NewAudioManager("assets/sounds")
 	return g
 }
 
@@ -105,6 +111,25 @@ func (g *Game) Update() error {
 	g.handleInput()
 	if g.quit {
 		return ebiten.Termination
+	}
+
+	// Clear easter egg message when time elapses
+	if g.easterUntilTick != 0 && g.tickCounter >= g.easterUntilTick {
+		g.easterUntilTick = 0
+		g.easterMessage = ""
+	}
+
+	// Random, rare easter-egg trigger (about ~100s on average)
+	if !g.enteringName && !g.showingLeaderboard && g.easterMessage == "" {
+		// Roughly 1 in 6000 updates (~100 seconds at 60 UPS)
+		if rand.Intn(6000) == 0 {
+			if rand.Intn(2) == 0 {
+				g.easterMessage = "Dad Loves Rekha"
+			} else {
+				g.easterMessage = "Dad Loves Roy"
+			}
+			g.easterUntilTick = g.tickCounter + updatesPerSecond*3
+		}
 	}
 
 	if g.showingLeaderboard {
@@ -203,6 +228,13 @@ func (g *Game) Draw(screen *ebiten.Image) {
 				if list[j].Score > list[maxIdx].Score {
 					maxIdx = j
 				}
+
+				// Draw easter egg message if present (overlay)
+				if g.easterMessage != "" {
+					msg := g.easterMessage
+					mw := len(msg) * 7
+					text.Draw(off, msg, basicfont.Face7x13, (nativeW-mw)/2, nativeH/2-20, color.RGBA{R: 255, G: 192, B: 203, A: 255})
+				}
 			}
 			list[i], list[maxIdx] = list[maxIdx], list[i]
 			line := fmt.Sprintf("%2d. %-12s  %6d", i+1, list[i].Name, list[i].Score)
@@ -248,6 +280,16 @@ func (g *Game) handleInput() {
 		if inpututil.IsKeyJustPressed(ebiten.KeyEnter) || inpututil.IsKeyJustPressed(ebiten.KeyKPEnter) {
 			if len([]rune(g.playerName)) > 0 {
 				g.enteringName = false
+				// Name-based easter eggs
+				low := strings.ToLower(strings.TrimSpace(g.playerName))
+				if low == "rekha" {
+					g.easterMessage = "Dad Loves Rekha"
+					g.easterUntilTick = g.tickCounter + updatesPerSecond*3
+				}
+				if low == "roy" {
+					g.easterMessage = "Dad Loves Roy"
+					g.easterUntilTick = g.tickCounter + updatesPerSecond*3
+				}
 			}
 		}
 		// Allow quitting/fullscreen even while entering name
@@ -306,6 +348,16 @@ func (g *Game) handleInput() {
 	if inpututil.IsKeyJustPressed(ebiten.KeyS) {
 		g.showingLeaderboard = !g.showingLeaderboard
 	}
+
+	// Easter eggs via keys
+	if inpututil.IsKeyJustPressed(ebiten.KeyR) { // Rekha
+		g.easterMessage = "Dad Loves Rekha"
+		g.easterUntilTick = g.tickCounter + updatesPerSecond*3
+	}
+	if inpututil.IsKeyJustPressed(ebiten.KeyY) { // Roy
+		g.easterMessage = "Dad Loves Roy"
+		g.easterUntilTick = g.tickCounter + updatesPerSecond*3
+	}
 }
 
 func (g *Game) updatePlayerMovement() {
@@ -347,8 +399,14 @@ func (g *Game) handlePelletCollision() {
 				// Enter frightened mode for standard duration
 				g.frightenedUntilTick = g.tickCounter + frightenedDurationUpdates
 				g.ghostEatCombo = 0
+				if g.audio != nil {
+					g.audio.PlayPowerPellet()
+				}
 			} else {
 				g.score += 10
+				if g.audio != nil {
+					g.audio.PlayPellet()
+				}
 			}
 			// Update and persist high score if surpassed
 			if g.score > g.highScore {
@@ -500,6 +558,9 @@ func (g *Game) checkPlayerGhostCollision() {
 					base = 1600
 				}
 				g.score += base
+				if g.audio != nil {
+					g.audio.PlayGhostEaten()
+				}
 				if g.score > g.highScore {
 					g.highScore = g.score
 					_ = SaveHighScoreRecord(&HighScoreRecord{Name: g.playerName, Score: g.highScore})
@@ -512,6 +573,9 @@ func (g *Game) checkPlayerGhostCollision() {
 				continue
 			}
 			g.lives--
+			if g.audio != nil {
+				g.audio.PlayDeath()
+			}
 			g.resetPositions()
 			if g.lives <= 0 {
 				// Save best on game over

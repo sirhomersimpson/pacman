@@ -2,7 +2,7 @@ SHELL := /bin/bash
 
 GO      ?= go
 BINARY  ?= pacman
-PKG     ?= .
+PKG     ?= ./cmd/pacman
 BUILD_DIR := bin
 
 .PHONY: help deps fmt vet build run clean release build-linux build-darwin build-windows test

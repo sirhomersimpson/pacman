@@ -33,6 +33,10 @@ type Game struct {
 	ghosts              []*entities.Ghost
 	score               int
 	highScore           int
+	highScoreName       string
+	playerName          string
+	enteringName        bool
+	showingLeaderboard  bool
 	lives               int
 	fullscreen          bool
 	paused              bool
@@ -52,8 +56,14 @@ func New() *Game {
 	p := &entities.Player{X: startX, Y: startY}
 	g := &Game{tileMap: m, player: p, lives: 3}
 
-	// Load persisted high score
-	g.highScore = LoadHighScore()
+	// Load persisted high score (with name if present)
+	if rec := LoadHighScoreRecord(); rec != nil {
+		g.highScore = rec.Score
+		g.highScoreName = rec.Name
+	} else {
+		g.highScore = 0
+	}
+	g.enteringName = true
 
 	// Spawn 4 ghosts near the center (ghost house area) at nearest corridor tiles
 	spawnTargets := [][2]int{{13, 14}, {14, 14}, {13, 15}, {14, 15}}
@@ -95,6 +105,14 @@ func (g *Game) Update() error {
 	g.handleInput()
 	if g.quit {
 		return ebiten.Termination
+	}
+
+	if g.showingLeaderboard {
+		return nil
+	}
+
+	if g.enteringName {
+		return nil
 	}
 
 	if g.frightenedUntilTick != 0 && g.tickCounter >= g.frightenedUntilTick {
@@ -141,8 +159,16 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		vector.DrawFilledCircle(off, float32(gh.X), float32(gh.Y), float32(tileSize/2-2), c, true)
 	}
 
-	// HUD: Score, High Score & Lives
-	text.Draw(off, fmt.Sprintf("Score: %d  High: %d  Lives: %d  FPS: %0.0f", g.score, g.highScore, g.lives, ebiten.ActualFPS()), basicfont.Face7x13, 4, 12, color.White)
+	// HUD: Score, High Score (with name) & Lives
+	hiLabel := "High"
+	if g.highScoreName != "" {
+		hiLabel = fmt.Sprintf("High(%s)", g.highScoreName)
+	}
+	name := g.playerName
+	if name == "" {
+		name = "Player"
+	}
+	text.Draw(off, fmt.Sprintf("%s  Score: %d  %s: %d  Lives: %d  FPS: %0.0f", name, g.score, hiLabel, g.highScore, g.lives, ebiten.ActualFPS()), basicfont.Face7x13, 4, 12, color.White)
 
 	// Show frightened timer if active (bottom right corner)
 	if g.isFrightened() {
@@ -151,6 +177,42 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		timerText := fmt.Sprintf("Frightened: %.1fs", remainingSeconds)
 		textWidth := len(timerText) * 7 // basicfont.Face7x13 is roughly 7 pixels wide per character
 		text.Draw(off, timerText, basicfont.Face7x13, nativeW-textWidth-4, nativeH-4, color.RGBA{R: 0, G: 255, B: 255, A: 255})
+	}
+
+	// If awaiting name, draw prompt centered
+	if g.enteringName {
+		prompt := "Enter name: " + g.playerName + "_"
+		pw := len(prompt) * 7
+		text.Draw(off, prompt, basicfont.Face7x13, (nativeW-pw)/2, nativeH/2, color.White)
+	}
+
+	// If showing leaderboard, draw it centered
+	if g.showingLeaderboard {
+		list := LoadLeaderboard()
+		title := "High Scores"
+		tw := len(title) * 7
+		y := nativeH/2 - 40
+		text.Draw(off, title, basicfont.Face7x13, (nativeW-tw)/2, y, color.RGBA{R: 255, G: 215, B: 0, A: 255})
+		y += 14
+		// Limit to top 10 sorted by score desc
+		// simple selection; list likely small
+		for i := 0; i < len(list) && i < 10; i++ {
+			// find max in remaining
+			maxIdx := i
+			for j := i + 1; j < len(list); j++ {
+				if list[j].Score > list[maxIdx].Score {
+					maxIdx = j
+				}
+			}
+			list[i], list[maxIdx] = list[maxIdx], list[i]
+			line := fmt.Sprintf("%2d. %-12s  %6d", i+1, list[i].Name, list[i].Score)
+			lw := len(line) * 7
+			text.Draw(off, line, basicfont.Face7x13, (nativeW-lw)/2, y, color.White)
+			y += 14
+		}
+		hint := "Press Q to exit"
+		hw := len(hint) * 7
+		text.Draw(off, hint, basicfont.Face7x13, (nativeW-hw)/2, nativeH-8, color.RGBA{R: 128, G: 128, B: 128, A: 255})
 	}
 
 	// Scale
@@ -164,6 +226,45 @@ func (g *Game) Layout(outsideWidth, outsideHeight int) (screenWidth, screenHeigh
 }
 
 func (g *Game) handleInput() {
+	// Name entry handling takes precedence
+	if g.enteringName {
+		// Collect typed characters
+		var chars []rune
+		chars = ebiten.AppendInputChars(chars)
+		for _, r := range chars {
+			if len([]rune(g.playerName)) >= 12 {
+				break
+			}
+			if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == ' ' || r == '_' || r == '-' {
+				g.playerName += string(r)
+			}
+		}
+		if inpututil.IsKeyJustPressed(ebiten.KeyBackspace) {
+			rs := []rune(g.playerName)
+			if len(rs) > 0 {
+				g.playerName = string(rs[:len(rs)-1])
+			}
+		}
+		if inpututil.IsKeyJustPressed(ebiten.KeyEnter) || inpututil.IsKeyJustPressed(ebiten.KeyKPEnter) {
+			if len([]rune(g.playerName)) > 0 {
+				g.enteringName = false
+			}
+		}
+		// Allow quitting/fullscreen even while entering name
+		if inpututil.IsKeyJustPressed(ebiten.KeyF) {
+			g.fullscreen = !g.fullscreen
+			ebiten.SetFullscreen(g.fullscreen)
+		}
+		if inpututil.IsKeyJustPressed(ebiten.KeyQ) {
+			// Save if necessary with name
+			if g.score > g.highScore {
+				g.highScore = g.score
+				_ = SaveHighScoreRecord(&HighScoreRecord{Name: g.playerName, Score: g.highScore})
+			}
+			g.quit = true
+		}
+		return
+	}
 	// Queue desired direction from input
 	if ebiten.IsKeyPressed(ebiten.KeyArrowUp) {
 		g.player.DesiredDir = entities.DirUp
@@ -191,9 +292,19 @@ func (g *Game) handleInput() {
 		// Persist high score before quitting
 		if g.score > g.highScore {
 			g.highScore = g.score
-			_ = SaveHighScore(g.highScore)
+			_ = SaveHighScoreRecord(&HighScoreRecord{Name: g.playerName, Score: g.highScore})
 		}
-		g.quit = true
+		// If leaderboard showing already, exit; otherwise show it first
+		if g.showingLeaderboard {
+			g.quit = true
+		} else {
+			g.showingLeaderboard = true
+		}
+	}
+
+	// Show leaderboard with 'S'
+	if inpututil.IsKeyJustPressed(ebiten.KeyS) {
+		g.showingLeaderboard = !g.showingLeaderboard
 	}
 }
 
@@ -242,7 +353,7 @@ func (g *Game) handlePelletCollision() {
 			// Update and persist high score if surpassed
 			if g.score > g.highScore {
 				g.highScore = g.score
-				_ = SaveHighScore(g.highScore)
+				_ = SaveHighScoreRecord(&HighScoreRecord{Name: g.playerName, Score: g.highScore})
 			}
 		}
 	}
@@ -391,7 +502,7 @@ func (g *Game) checkPlayerGhostCollision() {
 				g.score += base
 				if g.score > g.highScore {
 					g.highScore = g.score
-					_ = SaveHighScore(g.highScore)
+					_ = SaveHighScoreRecord(&HighScoreRecord{Name: g.playerName, Score: g.highScore})
 				}
 				g.ghostEatCombo++
 				// Send ghost back to house
@@ -406,8 +517,10 @@ func (g *Game) checkPlayerGhostCollision() {
 				// Save best on game over
 				if g.score > g.highScore {
 					g.highScore = g.score
-					_ = SaveHighScore(g.highScore)
+					_ = SaveHighScoreRecord(&HighScoreRecord{Name: g.playerName, Score: g.highScore})
 				}
+				// Show leaderboard instead of continuing
+				g.showingLeaderboard = true
 			}
 			return
 		}

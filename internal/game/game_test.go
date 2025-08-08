@@ -157,13 +157,13 @@ func TestHighScoreSavedOnQuitAndGameOver(t *testing.T) {
 
 func TestNewLoadsExistingHighScore(t *testing.T) {
 	t.Setenv("PACMAN_CONFIG_DIR", t.TempDir())
-	// Pre-save a score
-	if err := SaveHighScore(777); err != nil {
+	// Pre-save a record with a name
+	if err := SaveHighScoreRecord(&HighScoreRecord{Name: "Bob", Score: 777}); err != nil {
 		t.Fatalf("pre-save: %v", err)
 	}
 	g := New()
-	if g.highScore != 777 {
-		t.Fatalf("expected high score 777 loaded in New, got %d", g.highScore)
+	if g.highScore != 777 || g.highScoreName != "Bob" {
+		t.Fatalf("expected high score 777/Bob loaded in New, got %d/%q", g.highScore, g.highScoreName)
 	}
 }
 

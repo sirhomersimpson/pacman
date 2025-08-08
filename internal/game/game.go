@@ -24,18 +24,22 @@ const (
 	playerSpeedPixelsPerUpdate = playerSpeedPixelsPerSecond / updatesPerSecond
 	ghostSpeedPixelsPerSecond  = 420.0
 	ghostSpeedPixelsPerUpdate  = ghostSpeedPixelsPerSecond / updatesPerSecond
+	frightenedDurationUpdates  = 6 * updatesPerSecond
 )
 
 type Game struct {
-	tileMap    *tm.TileMap
-	player     *entities.Player
-	ghosts     []*entities.Ghost
-	score      int
-	lives      int
-	fullscreen bool
-	paused     bool
-	quit       bool
-	scale      float64
+	tileMap             *tm.TileMap
+	player              *entities.Player
+	ghosts              []*entities.Ghost
+	score               int
+	lives               int
+	fullscreen          bool
+	paused              bool
+	quit                bool
+	scale               float64
+	tickCounter         int
+	frightenedUntilTick int
+	ghostEatCombo       int
 }
 
 func New() *Game {
@@ -82,9 +86,16 @@ func (g *Game) ScreenHeight() int {
 }
 
 func (g *Game) Update() error {
+	// Advance global tick counter first so timers are robust
+	g.tickCounter++
 	g.handleInput()
 	if g.quit {
 		return ebiten.Termination
+	}
+
+	if g.frightenedUntilTick != 0 && g.tickCounter >= g.frightenedUntilTick {
+		g.frightenedUntilTick = 0
+		g.ghostEatCombo = 0
 	}
 	if g.paused {
 		return nil
@@ -120,6 +131,9 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	}
 	for i, gh := range g.ghosts {
 		c := ghostColors[i%len(ghostColors)]
+		if g.isFrightened() {
+			c = color.RGBA{R: 0, G: 0, B: 255, A: 255}
+		}
 		vector.DrawFilledCircle(off, float32(gh.X), float32(gh.Y), float32(tileSize/2-2), c, true)
 	}
 
@@ -201,6 +215,9 @@ func (g *Game) handlePelletCollision() {
 		if ate {
 			if power {
 				g.score += 50
+				// Enter frightened mode for standard duration
+				g.frightenedUntilTick = g.tickCounter + frightenedDurationUpdates
+				g.ghostEatCombo = 0
 			} else {
 				g.score += 10
 			}
@@ -339,11 +356,32 @@ func (g *Game) checkPlayerGhostCollision() {
 		dx := g.player.X - gh.X
 		dy := g.player.Y - gh.Y
 		if dx*dx+dy*dy <= (pr+gr)*(pr+gr) {
+			if g.isFrightened() {
+				// Eat ghost: score increases with combo 200, 400, 800, 1600
+				base := 200
+				if g.ghostEatCombo > 0 {
+					base = base << g.ghostEatCombo
+				}
+				if base > 1600 {
+					base = 1600
+				}
+				g.score += base
+				g.ghostEatCombo++
+				// Send ghost back to house
+				gh.X = float64(14*tileSize + tileSize/2)
+				gh.Y = float64(14*tileSize + tileSize/2)
+				gh.CurrentDir = entities.DirLeft
+				continue
+			}
 			g.lives--
 			g.resetPositions()
 			return
 		}
 	}
+}
+
+func (g *Game) isFrightened() bool {
+	return g.frightenedUntilTick > g.tickCounter
 }
 
 func (g *Game) resetPositions() {
@@ -352,6 +390,9 @@ func (g *Game) resetPositions() {
 	g.player.Y = float64(26*tileSize + tileSize/2)
 	g.player.CurrentDir = entities.DirNone
 	g.player.DesiredDir = entities.DirNone
+	// Clear frightened state on life loss
+	g.frightenedUntilTick = 0
+	g.ghostEatCombo = 0
 	// Reset ghosts to house
 	positions := [][2]int{{13, 14}, {14, 14}, {13, 15}, {14, 15}}
 	for i, gh := range g.ghosts {

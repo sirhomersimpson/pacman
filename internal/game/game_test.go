@@ -35,3 +35,60 @@ func TestPlayerCannotMoveThroughWall(t *testing.T) {
 		t.Fatalf("player appears to have moved through a wall: oldX=%v newX=%v", oldX, g.player.X)
 	}
 }
+
+func TestFrightenedModeTimeout(t *testing.T) {
+	g := New()
+
+	// Initially not frightened
+	if g.isFrightened() {
+		t.Error("Game should not be frightened initially")
+	}
+
+	// Simulate eating a power pellet
+	g.tickCounter = 100
+	g.frightenedUntilTick = g.tickCounter + frightenedDurationUpdates
+
+	expectedEnd := g.tickCounter + frightenedDurationUpdates
+	t.Logf("Power pellet eaten at tick %d, should end at tick %d (duration=%d)",
+		g.tickCounter, expectedEnd, frightenedDurationUpdates)
+
+	// Should be frightened now
+	if !g.isFrightened() {
+		t.Error("Game should be frightened after eating power pellet")
+	}
+
+	// Simulate updates until just before timeout
+	for i := 0; i < frightenedDurationUpdates-1; i++ {
+		g.tickCounter++
+
+		// Check timeout logic (same as Update() method)
+		if g.frightenedUntilTick != 0 && g.tickCounter >= g.frightenedUntilTick {
+			g.frightenedUntilTick = 0
+			g.ghostEatCombo = 0
+		}
+
+		if !g.isFrightened() && i < frightenedDurationUpdates-10 {
+			t.Errorf("Game should still be frightened at tick %d (i=%d)", g.tickCounter, i)
+		}
+	}
+
+	// Should still be frightened
+	if !g.isFrightened() {
+		t.Errorf("Game should still be frightened at tick %d", g.tickCounter)
+	}
+
+	// One more tick should end frightened mode
+	g.tickCounter++
+	if g.frightenedUntilTick != 0 && g.tickCounter >= g.frightenedUntilTick {
+		g.frightenedUntilTick = 0
+		g.ghostEatCombo = 0
+	}
+
+	if g.isFrightened() {
+		t.Errorf("Game should no longer be frightened at tick %d (until was %d)",
+			g.tickCounter, expectedEnd)
+	}
+
+	t.Logf("Test completed. Final tick: %d, expected end: %d", g.tickCounter, expectedEnd)
+}
+

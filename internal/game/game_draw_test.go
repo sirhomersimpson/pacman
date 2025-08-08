@@ -84,9 +84,10 @@ func TestNearestOpenTileVariants(t *testing.T) {
 
 func TestCanMoveWhenNotAligned(t *testing.T) {
 	g := New()
-	// Put player between centers to ensure not aligned
-	g.player.X += 2.0
-	g.player.Y += 2.0
+	// Put player far from center to ensure not aligned (beyond threshold)
+	// Threshold is playerSpeedPixelsPerUpdate/2 = 12/2 = 6 pixels
+	g.player.X += 8.0 // Beyond threshold
+	g.player.Y += 8.0 // Beyond threshold
 	g.player.CurrentDir = 0
 	// Attempt to move Right while not aligned should be false
 	if g.canMove(4) { // DirRight

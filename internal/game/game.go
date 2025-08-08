@@ -307,15 +307,21 @@ func (g *Game) handleInput() {
 		}
 		return
 	}
-	// Queue desired direction from input
-	if ebiten.IsKeyPressed(ebiten.KeyArrowUp) {
-		g.player.DesiredDir = entities.DirUp
-	} else if ebiten.IsKeyPressed(ebiten.KeyArrowDown) {
-		g.player.DesiredDir = entities.DirDown
-	} else if ebiten.IsKeyPressed(ebiten.KeyArrowLeft) {
-		g.player.DesiredDir = entities.DirLeft
-	} else if ebiten.IsKeyPressed(ebiten.KeyArrowRight) {
-		g.player.DesiredDir = entities.DirRight
+
+	// Don't process movement input when game is not actively playing
+	if g.showingLeaderboard || g.paused {
+		// Skip movement input but still allow other keys
+	} else {
+		// Queue desired direction from input
+		if ebiten.IsKeyPressed(ebiten.KeyArrowUp) {
+			g.player.DesiredDir = entities.DirUp
+		} else if ebiten.IsKeyPressed(ebiten.KeyArrowDown) {
+			g.player.DesiredDir = entities.DirDown
+		} else if ebiten.IsKeyPressed(ebiten.KeyArrowLeft) {
+			g.player.DesiredDir = entities.DirLeft
+		} else if ebiten.IsKeyPressed(ebiten.KeyArrowRight) {
+			g.player.DesiredDir = entities.DirRight
+		}
 	}
 
 	// Fullscreen toggle with 'F'
@@ -362,7 +368,7 @@ func (g *Game) handleInput() {
 
 func (g *Game) updatePlayerMovement() {
 	// Attempt to turn when aligned to the center of a cell
-	if g.isAlignedToCellCenter() && g.canMove(g.player.DesiredDir) {
+	if g.isAlignedToCellCenter() && g.canMoveFromCellCenter(g.player.DesiredDir) {
 		g.player.CurrentDir = g.player.DesiredDir
 	}
 
@@ -671,7 +677,9 @@ func (g *Game) cellCenter(gridX, gridY int) (float64, float64) {
 func (g *Game) isAlignedToCellCenter() bool {
 	gx, gy := g.playerGrid()
 	cx, cy := g.cellCenter(gx, gy)
-	return math.Abs(g.player.X-cx) < 1.0 && math.Abs(g.player.Y-cy) < 1.0
+	// Use half the player speed as threshold to ensure we catch alignment at high speeds
+	threshold := playerSpeedPixelsPerUpdate / 2.0
+	return math.Abs(g.player.X-cx) < threshold && math.Abs(g.player.Y-cy) < threshold
 }
 
 func (g *Game) isNearCellCenter() bool {
@@ -691,6 +699,30 @@ func (g *Game) canMove(dir entities.Direction) bool {
 	if !g.isAlignedToCellCenter() && dir != g.player.CurrentDir {
 		return false
 	}
+
+	// Next cell
+	nx, ny := gx+dx, gy+dy
+	// Wrap-around checks on X
+	if nx < 0 {
+		nx = g.tileMap.Width - 1
+	}
+	if nx >= g.tileMap.Width {
+		nx = 0
+	}
+	if ny < 0 || ny >= g.tileMap.Height {
+		return false
+	}
+	return !g.tileMap.IsWall(nx, ny)
+}
+
+// canMoveFromCellCenter checks if movement in a direction is valid from current cell
+// without requiring perfect alignment (used for queued turns)
+func (g *Game) canMoveFromCellCenter(dir entities.Direction) bool {
+	if dir == entities.DirNone {
+		return false
+	}
+	dx, dy := entities.DirDelta(dir)
+	gx, gy := g.playerGrid()
 
 	// Next cell
 	nx, ny := gx+dx, gy+dy

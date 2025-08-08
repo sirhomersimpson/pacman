@@ -1,0 +1,29 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Go build artifacts
+bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Go workspace (optional)
+go.work
+go.work.sum
+
+# Logs & temp
+*.log
+*.tmp
+*.swp
+*.swo
+
+# Coverage
+coverage*
+*.coverprofile
+
+

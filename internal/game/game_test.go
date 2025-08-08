@@ -1,6 +1,9 @@
 package game
 
-import "testing"
+import (
+	tm "pacman/internal/tilemap"
+	"testing"
+)
 
 func TestScreenDimensionsPositive(t *testing.T) {
 	g := New()
@@ -90,4 +93,139 @@ func TestFrightenedModeTimeout(t *testing.T) {
 	}
 
 	t.Logf("Test completed. Final tick: %d, expected end: %d", g.tickCounter, expectedEnd)
+}
+
+func TestHighScoreIntegrationOnPelletAndGhost(t *testing.T) {
+	t.Setenv("PACMAN_CONFIG_DIR", t.TempDir())
+	g := New()
+	if g.highScore != 0 {
+		t.Fatalf("expected initial high score 0, got %d", g.highScore)
+	}
+
+	// Simulate scoring: pellet (+10)
+	g.score = 0
+	g.highScore = 0
+	g.score += 10
+	if g.score > g.highScore {
+		g.highScore = g.score
+		_ = SaveHighScore(g.highScore)
+	}
+	if g.highScore != 10 {
+		t.Fatalf("expected high score 10 after pellet, got %d", g.highScore)
+	}
+
+	// Simulate frightened ghost eat (+200 base)
+	g.score += 200
+	if g.score > g.highScore {
+		g.highScore = g.score
+		_ = SaveHighScore(g.highScore)
+	}
+	if g.highScore != 210 {
+		t.Fatalf("expected high score 210 after ghost, got %d", g.highScore)
+	}
+}
+
+func TestHighScoreSavedOnQuitAndGameOver(t *testing.T) {
+	t.Setenv("PACMAN_CONFIG_DIR", t.TempDir())
+	g := New()
+	g.score = 500
+	g.highScore = 0
+
+	// Simulate quit path
+	if g.score > g.highScore {
+		g.highScore = g.score
+		if err := SaveHighScore(g.highScore); err != nil {
+			t.Fatalf("save: %v", err)
+		}
+	}
+	if got := LoadHighScore(); got != 500 {
+		t.Fatalf("expected saved high score 500, got %d", got)
+	}
+
+	// Simulate game over path saving a better score
+	g.score = 800
+	if g.score > g.highScore {
+		g.highScore = g.score
+		if err := SaveHighScore(g.highScore); err != nil {
+			t.Fatalf("save: %v", err)
+		}
+	}
+	if got := LoadHighScore(); got != 800 {
+		t.Fatalf("expected saved high score 800, got %d", got)
+	}
+}
+
+func TestNewLoadsExistingHighScore(t *testing.T) {
+	t.Setenv("PACMAN_CONFIG_DIR", t.TempDir())
+	// Pre-save a score
+	if err := SaveHighScore(777); err != nil {
+		t.Fatalf("pre-save: %v", err)
+	}
+	g := New()
+	if g.highScore != 777 {
+		t.Fatalf("expected high score 777 loaded in New, got %d", g.highScore)
+	}
+}
+
+func TestHighScoreUpdatedOnPelletCollision(t *testing.T) {
+	t.Setenv("PACMAN_CONFIG_DIR", t.TempDir())
+	g := New()
+	// Put player exactly at current grid's center
+	gx, gy := g.playerGrid()
+	cx, cy := g.cellCenter(gx, gy)
+	g.player.X, g.player.Y = cx, cy
+	// Ensure there's a pellet at this cell
+	g.tileMap.Tiles[gy][gx] = tm.TilePellet
+
+	// Call pellet collision logic
+	g.handlePelletCollision()
+
+	if g.score != 10 {
+		t.Fatalf("expected score 10 after pellet, got %d", g.score)
+	}
+	if got := LoadHighScore(); got != 10 {
+		t.Fatalf("expected persisted high score 10, got %d", got)
+	}
+}
+
+func TestHighScoreUpdatedOnGhostEatWhenFrightened(t *testing.T) {
+	t.Setenv("PACMAN_CONFIG_DIR", t.TempDir())
+	g := New()
+	// Frightened state active
+	g.tickCounter = 100
+	g.frightenedUntilTick = 200
+
+	// Place a ghost at player's position
+	g.ghosts[0].X = g.player.X
+	g.ghosts[0].Y = g.player.Y
+
+	g.checkPlayerGhostCollision()
+
+	if g.score < 200 {
+		t.Fatalf("expected score >=200 after eating ghost, got %d", g.score)
+	}
+	if got := LoadHighScore(); got < 200 {
+		t.Fatalf("expected persisted high score >=200, got %d", got)
+	}
+}
+
+func TestHighScoreSavedOnGameOver(t *testing.T) {
+	t.Setenv("PACMAN_CONFIG_DIR", t.TempDir())
+	g := New()
+	g.lives = 1
+	g.score = 123
+	g.highScore = 0
+
+	// Place a ghost at player's position with no frightened state
+	g.ghosts[0].X = g.player.X
+	g.ghosts[0].Y = g.player.Y
+
+	g.checkPlayerGhostCollision()
+
+	if g.lives != 0 {
+		t.Fatalf("expected lives to reach 0, got %d", g.lives)
+	}
+	if got := LoadHighScore(); got != 123 {
+		t.Fatalf("expected persisted high score 123 on game over, got %d", got)
+	}
 }

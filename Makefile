@@ -5,7 +5,7 @@ BINARY  ?= pacman
 PKG     ?= ./cmd/pacman
 BUILD_DIR := bin
 
-.PHONY: help deps fmt vet build run clean release build-linux build-darwin build-windows test
+.PHONY: help deps fmt vet build run clean release build-linux build-darwin build-windows test coverage coverage-html
 
 default: help
 
@@ -35,6 +35,14 @@ build: deps fmt vet
 
 test: deps
 	$(GO) test ./...
+
+coverage: deps
+	$(GO) test ./... -coverprofile=coverage.out
+	$(GO) tool cover -func=coverage.out
+
+coverage-html: coverage
+	$(GO) tool cover -html=coverage.out -o coverage.html
+	@echo "HTML report written to coverage.html"
 
 run: build
 	./$(BUILD_DIR)/$(BINARY)

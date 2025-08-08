@@ -32,6 +32,7 @@ type Game struct {
 	player              *entities.Player
 	ghosts              []*entities.Ghost
 	score               int
+	highScore           int
 	lives               int
 	fullscreen          bool
 	paused              bool
@@ -50,6 +51,9 @@ func New() *Game {
 	startY := float64(26*tileSize + tileSize/2)
 	p := &entities.Player{X: startX, Y: startY}
 	g := &Game{tileMap: m, player: p, lives: 3}
+
+	// Load persisted high score
+	g.highScore = LoadHighScore()
 
 	// Spawn 4 ghosts near the center (ghost house area) at nearest corridor tiles
 	spawnTargets := [][2]int{{13, 14}, {14, 14}, {13, 15}, {14, 15}}
@@ -137,8 +141,8 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		vector.DrawFilledCircle(off, float32(gh.X), float32(gh.Y), float32(tileSize/2-2), c, true)
 	}
 
-	// HUD: Score & Lives
-	text.Draw(off, fmt.Sprintf("Score: %d  Lives: %d  FPS: %0.0f", g.score, g.lives, ebiten.ActualFPS()), basicfont.Face7x13, 4, 12, color.White)
+	// HUD: Score, High Score & Lives
+	text.Draw(off, fmt.Sprintf("Score: %d  High: %d  Lives: %d  FPS: %0.0f", g.score, g.highScore, g.lives, ebiten.ActualFPS()), basicfont.Face7x13, 4, 12, color.White)
 
 	// Show frightened timer if active (bottom right corner)
 	if g.isFrightened() {
@@ -184,6 +188,11 @@ func (g *Game) handleInput() {
 
 	// Quit with 'Q'
 	if inpututil.IsKeyJustPressed(ebiten.KeyQ) {
+		// Persist high score before quitting
+		if g.score > g.highScore {
+			g.highScore = g.score
+			_ = SaveHighScore(g.highScore)
+		}
 		g.quit = true
 	}
 }
@@ -229,6 +238,11 @@ func (g *Game) handlePelletCollision() {
 				g.ghostEatCombo = 0
 			} else {
 				g.score += 10
+			}
+			// Update and persist high score if surpassed
+			if g.score > g.highScore {
+				g.highScore = g.score
+				_ = SaveHighScore(g.highScore)
 			}
 		}
 	}
@@ -375,6 +389,10 @@ func (g *Game) checkPlayerGhostCollision() {
 					base = 1600
 				}
 				g.score += base
+				if g.score > g.highScore {
+					g.highScore = g.score
+					_ = SaveHighScore(g.highScore)
+				}
 				g.ghostEatCombo++
 				// Send ghost back to house
 				gh.X = float64(14*tileSize + tileSize/2)
@@ -384,6 +402,13 @@ func (g *Game) checkPlayerGhostCollision() {
 			}
 			g.lives--
 			g.resetPositions()
+			if g.lives <= 0 {
+				// Save best on game over
+				if g.score > g.highScore {
+					g.highScore = g.score
+					_ = SaveHighScore(g.highScore)
+				}
+			}
 			return
 		}
 	}

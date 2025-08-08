@@ -151,14 +151,37 @@ The game should closely mimic the classic Pac-Man look and feel (grid layout, pe
 
 ## 8. Implementation Status
 
+### Completed Features
 - **Map & Rendering**: Implemented 28×31 ASCII maze with walls, pellets, power pellets, and wrap tunnels. Drawn at native resolution and scaled to fit ~75% of the display on first launch. Fullscreen toggle supported.
-- **Player Movement**: Grid-based movement with queued direction and cell-center turns. Wall collision enforced. Wrap-around horizontally. Current speed: fast (480 px/s at 60 UPS).
+- **Player Movement**: Grid-based movement with queued direction and cell-center turns. Wall collision enforced. Wrap-around horizontally. Current speed: 720 px/s at 60 UPS (1.5× original speed).
+- **Ghost System**: 
+  - 4 ghosts with random movement behavior (Milestone 3 ✓)
+  - Ghosts spawn in ghost house area
+  - Ghost-player collision detection with life loss
+  - Current speed: 630 px/s at 60 UPS (1.5× original speed)
+- **Power Pellets & Frightened Mode** (Milestone 5 ✓):
+  - Power pellets trigger frightened mode for 120 ticks (2 seconds at 60 UPS)
+  - Ghosts turn blue and can be eaten during frightened mode
+  - Score combo system: 200/400/800/1600 points for consecutive ghost eating
+  - Eaten ghosts return to ghost house
+  - Timer correctly expires and returns ghosts to normal state
 - **Input**: Arrow keys to move, `Space` to pause, `F` to toggle fullscreen, `Q` to quit.
-- **Scoring**: Pellets +10, Power Pellets +50. HUD shows Score top-left.
+- **Scoring**: Pellets +10, Power Pellets +50, Frightened ghosts 200-1600 (combo).
+- **HUD**: 
+  - Score, Lives, and FPS counter in top-left
+  - Frightened mode countdown timer in bottom-right (shows remaining seconds)
 - **Project Structure**: `cmd/pacman`, `internal/game`, `internal/entities`, `internal/tilemap`, `internal/ui`, `assets/` directories.
-- **Build tooling**: Makefile with `deps`, `build`, `run`, `test`, `release` targets. Unit tests added for entities, tilemap, and basic game constraints.
+- **Build tooling**: Makefile with `deps`, `build`, `run`, `test`, `release` targets. Unit tests for entities, tilemap, game logic, and frightened mode timer.
+
+### Technical Details
+- **Game Speed**: 60 updates per second (UPS)
+- **Player Speed**: 720 pixels/second (12 pixels per update)
+- **Ghost Speed**: 630 pixels/second (10.5 pixels per update)
+- **Frightened Duration**: 120 ticks (2 seconds at 60 UPS)
+- **Lives**: 3 lives, position reset on death
 
 ### Next Up
-- Ghosts (Milestone 3), Ghost AI & states (Milestone 4)
-- Power mode behavior (Milestone 5 reactions) and fruits (Milestone 6)
-- High score persistence and richer HUD
+- Ghost AI with pathfinding (Milestone 4) - Implement chase/scatter modes
+- Fruits and level progression (Milestone 6)
+- High score persistence
+- Sound effects integration

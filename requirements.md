@@ -154,10 +154,14 @@ The game should closely mimic the classic Pac-Man look and feel (grid layout, pe
 
 ### Completed Features
 - **Map & Rendering**: Implemented 28×31 ASCII maze with walls, pellets, power pellets, and wrap tunnels. Drawn at native resolution and scaled to fit ~75% of the display on first launch. Fullscreen toggle supported.
-- **Player Movement**: Grid-based movement with queued direction and cell-center turns. Wall collision enforced. Wrap-around horizontally. Current speed: 720 px/s at 60 UPS (1.5× original speed).
-- **Ghost System**: 
-  - 4 ghosts with random movement behavior (Milestone 3 ✓)
-  - Ghosts spawn in ghost house area
+- **Player Movement**: 
+  - Grid-based movement with queued direction and cell-center turns
+  - Wall collision enforced with wrap-around horizontally
+  - Current speed: 720 px/s at 60 UPS (1.5× original speed)
+  - **Fixed**: Improved turn detection with dynamic alignment threshold for responsive controls at high speeds
+- **Ghost System** (Milestone 3 ✓): 
+  - 4 ghosts with random movement behavior
+  - Ghosts spawn in ghost house area  
   - Ghost-player collision detection with life loss
   - Current speed: 630 px/s at 60 UPS (1.5× original speed)
 - **Power Pellets & Frightened Mode** (Milestone 5 ✓):
@@ -166,24 +170,62 @@ The game should closely mimic the classic Pac-Man look and feel (grid layout, pe
   - Score combo system: 200/400/800/1600 points for consecutive ghost eating
   - Eaten ghosts return to ghost house
   - Timer correctly expires and returns ghosts to normal state
-- **Input**: Arrow keys to move, `Space` to pause, `F` to toggle fullscreen, `Q` to quit, `S` to toggle leaderboard.
+  - Frightened timer display shows remaining seconds
+- **Audio System** ✓:
+  - Complete audio manager with support for pellet, power pellet, ghost eaten, and death sounds
+  - Graceful fallback to synthesized beeps when sound files are missing
+  - Disabled by default; enable with `PACMAN_ENABLE_AUDIO=1`
+  - Sound files go in `assets/sounds/` (pellet.wav, power.wav, ghost.wav, death.wav)
+- **High Score & Leaderboard** ✓:
+  - Player name entry at game start (max 12 characters)
+  - Persistent high score storage in JSON format
+  - Multi-player leaderboard tracking all players' best scores
+  - Leaderboard UI accessible via 'S' key or shown on game over
+  - Legacy high score file import support
+  - Atomic file writes for safe concurrent access
+- **Input Controls**: 
+  - Arrow keys to move
+  - `Space` to pause
+  - `F` to toggle fullscreen
+  - `Q` to quit (shows leaderboard first)
+  - `S` to toggle leaderboard
+  - `R`/`Y` for easter eggs
 - **Scoring**: Pellets +10, Power Pellets +50, Frightened ghosts 200-1600 (combo).
 - **HUD**: 
-  - Score, High score (with owner), Lives, and FPS counter in top-left
-  - Frightened mode countdown timer in bottom-right (shows remaining seconds)
-- **Project Structure**: `cmd/pacman`, `internal/game`, `internal/entities`, `internal/tilemap`, `internal/ui`, `assets/` directories.
-  - High score persistence stored in JSON at UserConfigDir (`highscore.json`) with legacy fallback.
-  - Leaderboard UI shown on game over or before exit (press `Q` twice to quit when shown).
-  - Name entry on startup; high scores stored per player.
-- **Build tooling**: Makefile with `deps`, `build`, `run`, `test`, `release` targets. Unit tests for entities, tilemap, game logic, and frightened mode timer.
+  - Player name, Score, High score (with owner's name), Lives, and FPS counter in top-left
+  - Frightened mode countdown timer in bottom-right (cyan, shows decimal seconds)
+- **Easter Eggs**:
+  - Name-based: Enter "Rekha" or "Roy" as name for special message
+  - Key-based: Press 'R' or 'Y' during gameplay
+  - Random: ~1/100 second chance for surprise message
+  - Messages appear in pink for 3 seconds
+- **Project Structure**: 
+  - `cmd/pacman`: Entry point
+  - `internal/game`: Core game loop, audio manager, high score system
+  - `internal/entities`: Player and ghost structs
+  - `internal/tilemap`: Maze rendering and tile management
+  - `internal/ui`: HUD utilities
+  - `assets/sounds/`: Audio files (currently empty)
+- **Build tooling**: 
+  - Makefile with `deps`, `build`, `run`, `test`, `coverage`, `coverage-html`, `release` targets
+  - Cross-platform builds for Linux, macOS, Windows
+  - Comprehensive unit tests including audio and high score systems
 
 ### Technical Details
 - **Game Speed**: 60 updates per second (UPS)
 - **Player Speed**: 720 pixels/second (12 pixels per update)
-- **Ghost Speed**: 630 pixels/second (10.5 pixels per update)
+- **Ghost Speed**: 630 pixels/second (10.5 pixels per update)  
 - **Frightened Duration**: 120 ticks (2 seconds at 60 UPS)
 - **Lives**: 3 lives, position reset on death
+- **Alignment Threshold**: 6 pixels (playerSpeed/2) for responsive turning
+- **High Score Storage**: `$HOME/.config/pacman/highscore.json` (or `PACMAN_CONFIG_DIR`)
+
+### Bug Fixes
+- **Fixed**: Movement keys not responding when game paused or showing leaderboard
+- **Fixed**: Direction changes not registering until hitting wall (improved alignment detection)
+- **Fixed**: Frightened mode timer expiring correctly after timeout
 
 ### Next Up
 - Ghost AI with pathfinding (Milestone 4) - Implement chase/scatter modes
 - Fruits and level progression (Milestone 6)
+- Actual sound file assets

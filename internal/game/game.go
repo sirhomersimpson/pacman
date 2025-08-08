@@ -20,11 +20,11 @@ import (
 const (
 	tileSize                   = 16
 	updatesPerSecond           = 60
-	playerSpeedPixelsPerSecond = 480.0
+	playerSpeedPixelsPerSecond = 720.0 // 480.0 * 1.5
 	playerSpeedPixelsPerUpdate = playerSpeedPixelsPerSecond / updatesPerSecond
-	ghostSpeedPixelsPerSecond  = 420.0
+	ghostSpeedPixelsPerSecond  = 630.0 // 420.0 * 1.5
 	ghostSpeedPixelsPerUpdate  = ghostSpeedPixelsPerSecond / updatesPerSecond
-	frightenedDurationUpdates  = 6 * updatesPerSecond
+	frightenedDurationUpdates  = 120 // 120 ticks = 2 seconds at 60 UPS
 )
 
 type Game struct {
@@ -138,7 +138,16 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	}
 
 	// HUD: Score & Lives
-	text.Draw(off, fmt.Sprintf("Score: %d  Lives: %d", g.score, g.lives), basicfont.Face7x13, 4, 12, color.White)
+	text.Draw(off, fmt.Sprintf("Score: %d  Lives: %d  FPS: %0.0f", g.score, g.lives, ebiten.ActualFPS()), basicfont.Face7x13, 4, 12, color.White)
+
+	// Show frightened timer if active (bottom right corner)
+	if g.isFrightened() {
+		remainingTicks := g.frightenedUntilTick - g.tickCounter
+		remainingSeconds := float64(remainingTicks) / float64(updatesPerSecond)
+		timerText := fmt.Sprintf("Frightened: %.1fs", remainingSeconds)
+		textWidth := len(timerText) * 7 // basicfont.Face7x13 is roughly 7 pixels wide per character
+		text.Draw(off, timerText, basicfont.Face7x13, nativeW-textWidth-4, nativeH-4, color.RGBA{R: 0, G: 255, B: 255, A: 255})
+	}
 
 	// Scale
 	op := &ebiten.DrawImageOptions{}

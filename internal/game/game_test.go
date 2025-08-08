@@ -91,4 +91,3 @@ func TestFrightenedModeTimeout(t *testing.T) {
 
 	t.Logf("Test completed. Final tick: %d, expected end: %d", g.tickCounter, expectedEnd)
 }
-

@@ -29,7 +29,7 @@ const (
 	frightenedDurationUpdates  = 120 // 120 ticks = 2 seconds at 60 UPS
 
 	// Alignment and movement constants
-	alignmentThreshold = playerSpeedPixelsPerUpdate / 2.0 // 6 pixels for responsive turning
+	alignmentThreshold = playerSpeedPixelsPerUpdate // 12 pixels - full movement speed for very responsive turning
 
 	// Easter egg constants
 	easterEggChance     = 6000 // 1 in 6000 chance (~100 seconds at 60 UPS)

@@ -51,7 +51,7 @@ func (g *Game) canTurn(dir entities.Direction) bool {
 	// Get current grid position
 	gx, gy := g.playerGrid()
 
-	// Check if the target cell is walkable
+	// Check if the target cell is walkable first
 	dx, dy := entities.DirDelta(dir)
 	nx, ny := gx+dx, gy+dy
 
@@ -68,7 +68,25 @@ func (g *Game) canTurn(dir entities.Direction) bool {
 		return false
 	}
 
-	return !g.tileMap.IsWall(nx, ny)
+	// If target is a wall, can't turn
+	if g.tileMap.IsWall(nx, ny) {
+		return false
+	}
+
+	// For turning, require some alignment but be more lenient
+	cx, cy := g.cellCenter(gx, gy)
+
+	// For vertical turns, require reasonable horizontal alignment
+	if dir == entities.DirUp || dir == entities.DirDown {
+		return math.Abs(g.player.X-cx) <= alignmentThreshold
+	}
+
+	// For horizontal turns, require reasonable vertical alignment
+	if dir == entities.DirLeft || dir == entities.DirRight {
+		return math.Abs(g.player.Y-cy) <= alignmentThreshold
+	}
+
+	return true
 }
 
 // isValidPosition checks if a position is valid for the player

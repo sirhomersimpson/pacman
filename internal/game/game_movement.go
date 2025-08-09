@@ -224,9 +224,11 @@ func (g *Game) updateGhostsRandom() {
 		aligned := math.Abs(gh.X-cx) < 1.0 && math.Abs(gh.Y-cy) < 1.0
 
 		if aligned {
-			// Choose direction based on frightened state
+			// Choose direction based on ghost state and global frightened state
 			var chosenDir entities.Direction
-			if g.isFrightened() {
+			if gh.State == entities.GhostEaten {
+				chosenDir = g.getDirectionTowardTarget(gx, gy, 14, 14)
+			} else if g.isFrightened() {
 				chosenDir = g.getFleeDirection(gh, gx, gy)
 			} else {
 				chosenDir = g.getRandomDirection(gh, gx, gy)
@@ -239,7 +241,9 @@ func (g *Game) updateGhostsRandom() {
 
 		// Move ghost with appropriate speed, but only if not blocked
 		speed := ghostSpeedPixelsPerUpdate
-		if g.isFrightened() {
+		if gh.State == entities.GhostEaten {
+			speed *= 1.5 // eyes return faster
+		} else if g.isFrightened() {
 			speed *= 0.5 // 50% speed when frightened
 		}
 
@@ -262,6 +266,18 @@ func (g *Game) updateGhostsRandom() {
 				chosenDir = g.getRandomDirection(gh, gx, gy)
 			}
 			gh.CurrentDir = chosenDir
+		}
+
+		// If eaten and reached house center, restore to normal state
+		if gh.State == entities.GhostEaten {
+			houseX := float64(14*tileSize + tileSize/2)
+			houseY := float64(14*tileSize + tileSize/2)
+			if math.Abs(gh.X-houseX) < 1.0 && math.Abs(gh.Y-houseY) < 1.0 {
+				gh.State = entities.GhostNormal
+				gh.CurrentDir = entities.DirLeft
+				gh.X = houseX
+				gh.Y = houseY
+			}
 		}
 
 		// wrap horizontally
@@ -414,6 +430,65 @@ func (g *Game) getRandomDirection(gh *entities.Ghost, gx, gy int) entities.Direc
 	}
 
 	return valid[0]
+}
+
+// getDirectionTowardTarget returns a valid direction that moves toward the target grid cell.
+// It prioritizes reducing the larger of the horizontal/vertical distance first, and avoids walls.
+func (g *Game) getDirectionTowardTarget(gx, gy, tx, ty int) entities.Direction {
+	// simple greedy: try axis with greater distance first
+	dx := tx - gx
+	dy := ty - gy
+	try := make([]entities.Direction, 0, 4)
+	if abs(dx) >= abs(dy) {
+		if dx > 0 {
+			try = append(try, entities.DirRight)
+		} else if dx < 0 {
+			try = append(try, entities.DirLeft)
+		}
+		if dy > 0 {
+			try = append(try, entities.DirDown)
+		} else if dy < 0 {
+			try = append(try, entities.DirUp)
+		}
+	} else {
+		if dy > 0 {
+			try = append(try, entities.DirDown)
+		} else if dy < 0 {
+			try = append(try, entities.DirUp)
+		}
+		if dx > 0 {
+			try = append(try, entities.DirRight)
+		} else if dx < 0 {
+			try = append(try, entities.DirLeft)
+		}
+	}
+	// add fallbacks
+	try = append(try, entities.DirUp, entities.DirDown, entities.DirLeft, entities.DirRight)
+
+	for _, dir := range try {
+		ddx, ddy := entities.DirDelta(dir)
+		nx, ny := gx+ddx, gy+ddy
+		if nx < 0 {
+			nx = g.tileMap.Width - 1
+		}
+		if nx >= g.tileMap.Width {
+			nx = 0
+		}
+		if ny < 0 || ny >= g.tileMap.Height {
+			continue
+		}
+		if !g.tileMap.IsWall(nx, ny) {
+			return dir
+		}
+	}
+	return entities.DirLeft
+}
+
+func abs(a int) int {
+	if a < 0 {
+		return -a
+	}
+	return a
 }
 
 func (g *Game) playerGrid() (int, int) {

@@ -59,10 +59,10 @@ func (g *Game) checkPlayerGhostCollision() {
 					_ = SaveHighScoreRecord(&HighScoreRecord{Name: g.playerName, Score: g.highScore})
 				}
 				g.ghostEatCombo++
-				// Send ghost back to house
-				gh.X = float64(14*tileSize + tileSize/2)
-				gh.Y = float64(14*tileSize + tileSize/2)
-				gh.CurrentDir = entities.DirLeft
+				// Mark ghost as eaten: it should return to house quickly (eyes-only behavior)
+				gh.State = entities.GhostEaten
+				// Immediately choose a direction toward the house
+				gh.CurrentDir = entities.DirNone
 				continue
 			}
 			g.lives--

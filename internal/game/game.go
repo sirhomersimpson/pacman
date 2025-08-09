@@ -99,8 +99,9 @@ func New() *Game {
 	for _, t := range spawnTargets {
 		ox, oy := g.nearestCorridorTile(t[0], t[1])
 		g.ghosts = append(g.ghosts, &entities.Ghost{
-			X: float64(ox*tileSize + tileSize/2),
-			Y: float64(oy*tileSize + tileSize/2),
+			X:     float64(ox*tileSize + tileSize/2),
+			Y:     float64(oy*tileSize + tileSize/2),
+			State: entities.GhostNormal,
 		})
 	}
 

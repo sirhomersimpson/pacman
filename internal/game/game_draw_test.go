@@ -82,15 +82,18 @@ func TestNearestOpenTileVariants(t *testing.T) {
 	}
 }
 
-func TestCanMoveWhenNotAligned(t *testing.T) {
+func TestCanTurnToValidDirection(t *testing.T) {
 	g := New()
-	// Put player far from center to ensure not aligned (beyond threshold)
-	// Threshold is playerSpeedPixelsPerUpdate/2 = 12/2 = 6 pixels
-	g.player.X += 8.0 // Beyond threshold
-	g.player.Y += 8.0 // Beyond threshold
-	g.player.CurrentDir = 0
-	// Attempt to move Right while not aligned should be false
-	if g.canMove(4) { // DirRight
-		t.Fatalf("expected canMove false when not aligned and turning")
+	// Test that turning works in valid directions from starting position
+	// Player starts at (14*16 + 8, 26*16 + 8) which is a horizontal corridor
+	// Left and Right should be valid, Up should be blocked by wall
+	if !g.canTurn(3) { // DirLeft - should be valid from starting position
+		t.Fatalf("expected canTurn true for left direction from starting position")
+	}
+	if !g.canTurn(4) { // DirRight - should be valid from starting position
+		t.Fatalf("expected canTurn true for right direction from starting position")
+	}
+	if g.canTurn(1) { // DirUp - should be blocked by wall
+		t.Fatalf("expected canTurn false for up direction from starting position (wall above)")
 	}
 }

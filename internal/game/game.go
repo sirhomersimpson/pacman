@@ -5,6 +5,7 @@ import (
 	"image/color"
 	"math"
 	"math/rand"
+	"sort"
 	"strings"
 	"time"
 
@@ -26,6 +27,24 @@ const (
 	ghostSpeedPixelsPerSecond  = 630.0 // 420.0 * 1.5
 	ghostSpeedPixelsPerUpdate  = ghostSpeedPixelsPerSecond / updatesPerSecond
 	frightenedDurationUpdates  = 120 // 120 ticks = 2 seconds at 60 UPS
+
+	// Alignment and movement constants
+	alignmentThreshold = playerSpeedPixelsPerUpdate / 2.0 // 6 pixels for responsive turning
+
+	// Easter egg constants
+	easterEggChance     = 6000 // 1 in 6000 chance (~100 seconds at 60 UPS)
+	easterEggDuration   = 3    // 3 seconds
+	maxPlayerNameLength = 12
+
+	// Scoring constants
+	pelletPoints      = 10
+	powerPelletPoints = 50
+	baseGhostPoints   = 200
+	maxGhostPoints    = 1600
+
+	// Display constants
+	displayFitRatio = 0.75 // Use 75% of display area
+	fontCharWidth   = 7    // basicfont.Face7x13 character width
 )
 
 type Game struct {
@@ -49,6 +68,7 @@ type Game struct {
 	audio               *AudioManager
 	easterMessage       string
 	easterUntilTick     int
+	offscreenImage      *ebiten.Image // Cached to avoid per-frame allocation
 }
 
 func New() *Game {
@@ -83,15 +103,18 @@ func New() *Game {
 	nativeW := m.Width * tileSize
 	nativeH := m.Height * tileSize
 	sw, sh := ebiten.ScreenSizeInFullscreen()
-	fit := 0.75
-	maxW := int(float64(sw) * fit)
-	maxH := int(float64(sh) * fit)
+	maxW := int(float64(sw) * displayFitRatio)
+	maxH := int(float64(sh) * displayFitRatio)
 	scaleW := float64(maxW) / float64(nativeW)
 	scaleH := float64(maxH) / float64(nativeH)
 	g.scale = math.Min(scaleW, scaleH)
 	if g.scale <= 0 || math.IsNaN(g.scale) || math.IsInf(g.scale, 0) {
 		g.scale = 1.0
 	}
+
+	// Initialize cached offscreen image
+	g.offscreenImage = ebiten.NewImage(nativeW, nativeH)
+
 	// Init audio (graceful if files missing)
 	g.audio = NewAudioManager("assets/sounds")
 	return g
@@ -122,13 +145,13 @@ func (g *Game) Update() error {
 	// Random, rare easter-egg trigger (about ~100s on average)
 	if !g.enteringName && !g.showingLeaderboard && g.easterMessage == "" {
 		// Roughly 1 in 6000 updates (~100 seconds at 60 UPS)
-		if rand.Intn(6000) == 0 {
+		if rand.Intn(easterEggChance) == 0 {
 			if rand.Intn(2) == 0 {
 				g.easterMessage = "Dad Loves Rekha"
 			} else {
 				g.easterMessage = "Dad Loves Roy"
 			}
-			g.easterUntilTick = g.tickCounter + updatesPerSecond*3
+			g.easterUntilTick = g.tickCounter + updatesPerSecond*easterEggDuration
 		}
 	}
 
@@ -158,10 +181,9 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	// Clear background (black)
 	screen.Fill(color.Black)
 
-	// Use an offscreen image at native resolution then scale up
-	nativeW := g.tileMap.Width * tileSize
-	nativeH := g.tileMap.Height * tileSize
-	off := ebiten.NewImage(nativeW, nativeH)
+	// Use cached offscreen image at native resolution then scale up
+	off := g.offscreenImage
+	off.Fill(color.Black) // Clear the cached image
 
 	// Draw map
 	g.tileMap.Draw(off)
@@ -179,7 +201,19 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	for i, gh := range g.ghosts {
 		c := ghostColors[i%len(ghostColors)]
 		if g.isFrightened() {
-			c = color.RGBA{R: 0, G: 0, B: 255, A: 255}
+			remainingTicks := g.frightenedUntilTick - g.tickCounter
+			// Flash white/blue in last 2 seconds (120 ticks)
+			if remainingTicks < 120 {
+				// Alternate between white and blue every 10 ticks
+				if (g.tickCounter/10)%2 == 0 {
+					c = color.RGBA{R: 255, G: 255, B: 255, A: 255} // white
+				} else {
+					c = color.RGBA{R: 0, G: 0, B: 255, A: 255} // blue
+				}
+			} else {
+				// Solid blue when not flashing
+				c = color.RGBA{R: 0, G: 0, B: 255, A: 255}
+			}
 		}
 		vector.DrawFilledCircle(off, float32(gh.X), float32(gh.Y), float32(tileSize/2-2), c, true)
 	}
@@ -200,51 +234,61 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		remainingTicks := g.frightenedUntilTick - g.tickCounter
 		remainingSeconds := float64(remainingTicks) / float64(updatesPerSecond)
 		timerText := fmt.Sprintf("Frightened: %.1fs", remainingSeconds)
-		textWidth := len(timerText) * 7 // basicfont.Face7x13 is roughly 7 pixels wide per character
+		textWidth := len(timerText) * fontCharWidth
+		nativeW := g.tileMap.Width * tileSize
+		nativeH := g.tileMap.Height * tileSize
 		text.Draw(off, timerText, basicfont.Face7x13, nativeW-textWidth-4, nativeH-4, color.RGBA{R: 0, G: 255, B: 255, A: 255})
 	}
 
 	// If awaiting name, draw prompt centered
 	if g.enteringName {
 		prompt := "Enter name: " + g.playerName + "_"
-		pw := len(prompt) * 7
+		pw := len(prompt) * fontCharWidth
+		nativeW := g.tileMap.Width * tileSize
+		nativeH := g.tileMap.Height * tileSize
 		text.Draw(off, prompt, basicfont.Face7x13, (nativeW-pw)/2, nativeH/2, color.White)
 	}
 
 	// If showing leaderboard, draw it centered
 	if g.showingLeaderboard {
 		list := LoadLeaderboard()
+		nativeW := g.tileMap.Width * tileSize
+		nativeH := g.tileMap.Height * tileSize
 		title := "High Scores"
-		tw := len(title) * 7
+		tw := len(title) * fontCharWidth
 		y := nativeH/2 - 40
 		text.Draw(off, title, basicfont.Face7x13, (nativeW-tw)/2, y, color.RGBA{R: 255, G: 215, B: 0, A: 255})
 		y += 14
-		// Limit to top 10 sorted by score desc
-		// simple selection; list likely small
-		for i := 0; i < len(list) && i < 10; i++ {
-			// find max in remaining
-			maxIdx := i
-			for j := i + 1; j < len(list); j++ {
-				if list[j].Score > list[maxIdx].Score {
-					maxIdx = j
-				}
 
-				// Draw easter egg message if present (overlay)
-				if g.easterMessage != "" {
-					msg := g.easterMessage
-					mw := len(msg) * 7
-					text.Draw(off, msg, basicfont.Face7x13, (nativeW-mw)/2, nativeH/2-20, color.RGBA{R: 255, G: 192, B: 203, A: 255})
-				}
-			}
-			list[i], list[maxIdx] = list[maxIdx], list[i]
+		// Sort by score descending using efficient sort.Slice
+		sort.Slice(list, func(i, j int) bool {
+			return list[i].Score > list[j].Score
+		})
+
+		// Limit to top 10
+		displayCount := len(list)
+		if displayCount > 10 {
+			displayCount = 10
+		}
+
+		for i := 0; i < displayCount; i++ {
 			line := fmt.Sprintf("%2d. %-12s  %6d", i+1, list[i].Name, list[i].Score)
-			lw := len(line) * 7
+			lw := len(line) * fontCharWidth
 			text.Draw(off, line, basicfont.Face7x13, (nativeW-lw)/2, y, color.White)
 			y += 14
 		}
 		hint := "Press Q to exit"
-		hw := len(hint) * 7
+		hw := len(hint) * fontCharWidth
 		text.Draw(off, hint, basicfont.Face7x13, (nativeW-hw)/2, nativeH-8, color.RGBA{R: 128, G: 128, B: 128, A: 255})
+	}
+
+	// Draw easter egg message if present (overlay)
+	if g.easterMessage != "" {
+		msg := g.easterMessage
+		mw := len(msg) * fontCharWidth
+		nativeW := g.tileMap.Width * tileSize
+		nativeH := g.tileMap.Height * tileSize
+		text.Draw(off, msg, basicfont.Face7x13, (nativeW-mw)/2, nativeH/2-20, color.RGBA{R: 255, G: 192, B: 203, A: 255})
 	}
 
 	// Scale
@@ -264,7 +308,7 @@ func (g *Game) handleInput() {
 		var chars []rune
 		chars = ebiten.AppendInputChars(chars)
 		for _, r := range chars {
-			if len([]rune(g.playerName)) >= 12 {
+			if len([]rune(g.playerName)) >= maxPlayerNameLength {
 				break
 			}
 			if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == ' ' || r == '_' || r == '-' {
@@ -284,11 +328,11 @@ func (g *Game) handleInput() {
 				low := strings.ToLower(strings.TrimSpace(g.playerName))
 				if low == "rekha" {
 					g.easterMessage = "Dad Loves Rekha"
-					g.easterUntilTick = g.tickCounter + updatesPerSecond*3
+					g.easterUntilTick = g.tickCounter + updatesPerSecond*easterEggDuration
 				}
 				if low == "roy" {
 					g.easterMessage = "Dad Loves Roy"
-					g.easterUntilTick = g.tickCounter + updatesPerSecond*3
+					g.easterUntilTick = g.tickCounter + updatesPerSecond*easterEggDuration
 				}
 			}
 		}
@@ -358,405 +402,10 @@ func (g *Game) handleInput() {
 	// Easter eggs via keys
 	if inpututil.IsKeyJustPressed(ebiten.KeyR) { // Rekha
 		g.easterMessage = "Dad Loves Rekha"
-		g.easterUntilTick = g.tickCounter + updatesPerSecond*3
+		g.easterUntilTick = g.tickCounter + updatesPerSecond*easterEggDuration
 	}
 	if inpututil.IsKeyJustPressed(ebiten.KeyY) { // Roy
 		g.easterMessage = "Dad Loves Roy"
-		g.easterUntilTick = g.tickCounter + updatesPerSecond*3
-	}
-}
-
-func (g *Game) updatePlayerMovement() {
-	// Attempt to turn when aligned to the center of a cell
-	if g.isAlignedToCellCenter() && g.canMoveFromCellCenter(g.player.DesiredDir) {
-		g.player.CurrentDir = g.player.DesiredDir
-	}
-
-	// Move in current direction if possible
-	if g.canMove(g.player.CurrentDir) {
-		dx, dy := entities.DirDelta(g.player.CurrentDir)
-		g.player.X += float64(dx) * playerSpeedPixelsPerUpdate
-		g.player.Y += float64(dy) * playerSpeedPixelsPerUpdate
-	} else {
-		// If blocked, snap to cell center to avoid jitter
-		gx, gy := g.playerGrid()
-		g.player.X = float64(gx*tileSize + tileSize/2)
-		g.player.Y = float64(gy*tileSize + tileSize/2)
-	}
-
-	// Wrap-around tunnels
-	maxX := float64(g.tileMap.Width * tileSize)
-	if g.player.X < 0 {
-		g.player.X += maxX
-	}
-	if g.player.X >= maxX {
-		g.player.X -= maxX
-	}
-}
-
-func (g *Game) handlePelletCollision() {
-	// Eat pellet when close to cell center containing a pellet
-	gx, gy := g.playerGrid()
-	if g.isNearCellCenter() {
-		ate, power := g.tileMap.EatPelletAt(gx, gy)
-		if ate {
-			if power {
-				g.score += 50
-				// Enter frightened mode for standard duration
-				g.frightenedUntilTick = g.tickCounter + frightenedDurationUpdates
-				g.ghostEatCombo = 0
-				if g.audio != nil {
-					g.audio.PlayPowerPellet()
-				}
-			} else {
-				g.score += 10
-				if g.audio != nil {
-					g.audio.PlayPellet()
-				}
-			}
-			// Update and persist high score if surpassed
-			if g.score > g.highScore {
-				g.highScore = g.score
-				_ = SaveHighScoreRecord(&HighScoreRecord{Name: g.playerName, Score: g.highScore})
-			}
-		}
-	}
-}
-
-// Ghost behavior: simple random movement on intersections, avoid walls
-func (g *Game) updateGhostsRandom() {
-	for _, gh := range g.ghosts {
-		// If not aligned to tile center, continue current direction
-		gx := int(gh.X) / tileSize
-		gy := int(gh.Y) / tileSize
-		cx := float64(gx*tileSize + tileSize/2)
-		cy := float64(gy*tileSize + tileSize/2)
-		aligned := math.Abs(gh.X-cx) < 1.0 && math.Abs(gh.Y-cy) < 1.0
-		if aligned {
-			// Choose a random valid direction, prefer continuing straight, avoid immediate reversal
-			candidateDirs := []entities.Direction{entities.DirUp, entities.DirDown, entities.DirLeft, entities.DirRight}
-			// place current direction first to bias straight
-			ordered := make([]entities.Direction, 0, 4)
-			if gh.CurrentDir != entities.DirNone {
-				ordered = append(ordered, gh.CurrentDir)
-			}
-			for _, d := range candidateDirs {
-				if d != gh.CurrentDir && !isReverse(gh.CurrentDir, d) {
-					ordered = append(ordered, d)
-				}
-			}
-			// If still empty (at start), just use candidates shuffled
-			if len(ordered) == 0 {
-				ordered = candidateDirs
-			}
-			rand.Shuffle(len(ordered), func(i, j int) { ordered[i], ordered[j] = ordered[j], ordered[i] })
-
-			for _, d := range ordered {
-				dx, dy := entities.DirDelta(d)
-				nx, ny := gx+dx, gy+dy
-				if nx < 0 {
-					nx = g.tileMap.Width - 1
-				}
-				if nx >= g.tileMap.Width {
-					nx = 0
-				}
-				if ny < 0 || ny >= g.tileMap.Height {
-					continue
-				}
-				if !g.tileMap.IsWall(nx, ny) {
-					gh.CurrentDir = d
-					break
-				}
-			}
-			// Snap to center when aligned to avoid drift
-			gh.X = cx
-			gh.Y = cy
-		}
-		dx, dy := entities.DirDelta(gh.CurrentDir)
-		// If blocked mid-cell, snap to center and pick a new direction immediately
-		nextGX, nextGY := gx+dx, gy+dy
-		if nextGX < 0 {
-			nextGX = g.tileMap.Width - 1
-		}
-		if nextGX >= g.tileMap.Width {
-			nextGX = 0
-		}
-		if g.tileMap.IsWall(nextGX, nextGY) && !aligned {
-			gh.X = cx
-			gh.Y = cy
-			// force choose a new direction at this intersection
-			// reuse aligned branch next iteration by marking aligned now
-			aligned = true
-		}
-		if aligned {
-			// Choose direction now that we are centered
-			// replicate the same logic as above but simpler via recursion of branch
-			// (inline):
-			candidateDirs := []entities.Direction{entities.DirUp, entities.DirDown, entities.DirLeft, entities.DirRight}
-			valid := make([]entities.Direction, 0, 4)
-			for _, d := range candidateDirs {
-				tx, ty := entities.DirDelta(d)
-				nx, ny := gx+tx, gy+ty
-				if nx < 0 {
-					nx = g.tileMap.Width - 1
-				}
-				if nx >= g.tileMap.Width {
-					nx = 0
-				}
-				if ny < 0 || ny >= g.tileMap.Height {
-					continue
-				}
-				if !g.tileMap.IsWall(nx, ny) {
-					valid = append(valid, d)
-				}
-			}
-			if len(valid) == 0 {
-				valid = []entities.Direction{reverseDir(gh.CurrentDir)}
-			}
-			rand.Shuffle(len(valid), func(i, j int) { valid[i], valid[j] = valid[j], valid[i] })
-			// prefer straight if present
-			for _, d := range valid {
-				if d == gh.CurrentDir {
-					gh.CurrentDir = d
-					break
-				}
-			}
-			gh.CurrentDir = valid[0]
-			dx, dy = entities.DirDelta(gh.CurrentDir)
-		}
-		gh.X += float64(dx) * ghostSpeedPixelsPerUpdate
-		gh.Y += float64(dy) * ghostSpeedPixelsPerUpdate
-		// wrap horizontally
-		maxX := float64(g.tileMap.Width * tileSize)
-		if gh.X < 0 {
-			gh.X += maxX
-		}
-		if gh.X >= maxX {
-			gh.X -= maxX
-		}
-		// clamp Y within bounds to avoid exiting map vertically
-		minY := float64(tileSize / 2)
-		maxY := float64(g.tileMap.Height*tileSize - tileSize/2)
-		if gh.Y < minY {
-			gh.Y = minY
-		}
-		if gh.Y > maxY {
-			gh.Y = maxY
-		}
-	}
-}
-
-func (g *Game) checkPlayerGhostCollision() {
-	// collision if within radius distance
-	pr := float64(tileSize/2 - 2)
-	gr := float64(tileSize/2 - 2)
-	for _, gh := range g.ghosts {
-		dx := g.player.X - gh.X
-		dy := g.player.Y - gh.Y
-		if dx*dx+dy*dy <= (pr+gr)*(pr+gr) {
-			if g.isFrightened() {
-				// Eat ghost: score increases with combo 200, 400, 800, 1600
-				base := 200
-				if g.ghostEatCombo > 0 {
-					base = base << g.ghostEatCombo
-				}
-				if base > 1600 {
-					base = 1600
-				}
-				g.score += base
-				if g.audio != nil {
-					g.audio.PlayGhostEaten()
-				}
-				if g.score > g.highScore {
-					g.highScore = g.score
-					_ = SaveHighScoreRecord(&HighScoreRecord{Name: g.playerName, Score: g.highScore})
-				}
-				g.ghostEatCombo++
-				// Send ghost back to house
-				gh.X = float64(14*tileSize + tileSize/2)
-				gh.Y = float64(14*tileSize + tileSize/2)
-				gh.CurrentDir = entities.DirLeft
-				continue
-			}
-			g.lives--
-			if g.audio != nil {
-				g.audio.PlayDeath()
-			}
-			g.resetPositions()
-			if g.lives <= 0 {
-				// Save best on game over
-				if g.score > g.highScore {
-					g.highScore = g.score
-					_ = SaveHighScoreRecord(&HighScoreRecord{Name: g.playerName, Score: g.highScore})
-				}
-				// Show leaderboard instead of continuing
-				g.showingLeaderboard = true
-			}
-			return
-		}
-	}
-}
-
-func (g *Game) isFrightened() bool {
-	return g.frightenedUntilTick > g.tickCounter
-}
-
-func (g *Game) resetPositions() {
-	// Reset player
-	g.player.X = float64(14*tileSize + tileSize/2)
-	g.player.Y = float64(26*tileSize + tileSize/2)
-	g.player.CurrentDir = entities.DirNone
-	g.player.DesiredDir = entities.DirNone
-	// Clear frightened state on life loss
-	g.frightenedUntilTick = 0
-	g.ghostEatCombo = 0
-	// Reset ghosts to house
-	positions := [][2]int{{13, 14}, {14, 14}, {13, 15}, {14, 15}}
-	for i, gh := range g.ghosts {
-		ox, oy := g.nearestOpenTile(positions[i][0], positions[i][1])
-		gh.X = float64(ox*tileSize + tileSize/2)
-		gh.Y = float64(oy*tileSize + tileSize/2)
-		gh.CurrentDir = entities.DirLeft
-	}
-}
-
-// nearestOpenTile returns the nearest non-wall tile from a starting grid coordinate.
-func (g *Game) nearestOpenTile(x, y int) (int, int) {
-	if !g.tileMap.IsWall(x, y) {
-		return x, y
-	}
-	// BFS ring search limited radius
-	maxR := 6
-	for r := 1; r <= maxR; r++ {
-		for dy := -r; dy <= r; dy++ {
-			for dx := -r; dx <= r; dx++ {
-				nx, ny := x+dx, y+dy
-				if nx < 0 || ny < 0 || nx >= g.tileMap.Width || ny >= g.tileMap.Height {
-					continue
-				}
-				if !g.tileMap.IsWall(nx, ny) {
-					return nx, ny
-				}
-			}
-		}
-	}
-	// fallback to original
-	return x, y
-}
-
-// nearestCorridorTile finds a non-wall, non-empty corridor (i.e., avoids large empty blue regions)
-func (g *Game) nearestCorridorTile(x, y int) (int, int) {
-	if !g.tileMap.IsWall(x, y) && g.tileMap.Tiles[y][x] != tm.TileEmpty {
-		return x, y
-	}
-	maxR := 8
-	for r := 1; r <= maxR; r++ {
-		for dy := -r; dy <= r; dy++ {
-			for dx := -r; dx <= r; dx++ {
-				nx, ny := x+dx, y+dy
-				if nx < 0 || ny < 0 || nx >= g.tileMap.Width || ny >= g.tileMap.Height {
-					continue
-				}
-				if !g.tileMap.IsWall(nx, ny) && g.tileMap.Tiles[ny][nx] != tm.TileEmpty {
-					return nx, ny
-				}
-			}
-		}
-	}
-	return g.nearestOpenTile(x, y)
-}
-
-func (g *Game) playerGrid() (int, int) {
-	return int(g.player.X) / tileSize, int(g.player.Y) / tileSize
-}
-
-func (g *Game) cellCenter(gridX, gridY int) (float64, float64) {
-	return float64(gridX*tileSize + tileSize/2), float64(gridY*tileSize + tileSize/2)
-}
-
-func (g *Game) isAlignedToCellCenter() bool {
-	gx, gy := g.playerGrid()
-	cx, cy := g.cellCenter(gx, gy)
-	// Use half the player speed as threshold to ensure we catch alignment at high speeds
-	threshold := playerSpeedPixelsPerUpdate / 2.0
-	return math.Abs(g.player.X-cx) < threshold && math.Abs(g.player.Y-cy) < threshold
-}
-
-func (g *Game) isNearCellCenter() bool {
-	gx, gy := g.playerGrid()
-	cx, cy := g.cellCenter(gx, gy)
-	return math.Abs(g.player.X-cx) < 5.0 && math.Abs(g.player.Y-cy) < 5.0
-}
-
-func (g *Game) canMove(dir entities.Direction) bool {
-	if dir == entities.DirNone {
-		return false
-	}
-	dx, dy := entities.DirDelta(dir)
-	gx, gy := g.playerGrid()
-
-	// If not aligned, only allow continuing straight to reach alignment
-	if !g.isAlignedToCellCenter() && dir != g.player.CurrentDir {
-		return false
-	}
-
-	// Next cell
-	nx, ny := gx+dx, gy+dy
-	// Wrap-around checks on X
-	if nx < 0 {
-		nx = g.tileMap.Width - 1
-	}
-	if nx >= g.tileMap.Width {
-		nx = 0
-	}
-	if ny < 0 || ny >= g.tileMap.Height {
-		return false
-	}
-	return !g.tileMap.IsWall(nx, ny)
-}
-
-// canMoveFromCellCenter checks if movement in a direction is valid from current cell
-// without requiring perfect alignment (used for queued turns)
-func (g *Game) canMoveFromCellCenter(dir entities.Direction) bool {
-	if dir == entities.DirNone {
-		return false
-	}
-	dx, dy := entities.DirDelta(dir)
-	gx, gy := g.playerGrid()
-
-	// Next cell
-	nx, ny := gx+dx, gy+dy
-	// Wrap-around checks on X
-	if nx < 0 {
-		nx = g.tileMap.Width - 1
-	}
-	if nx >= g.tileMap.Width {
-		nx = 0
-	}
-	if ny < 0 || ny >= g.tileMap.Height {
-		return false
-	}
-	return !g.tileMap.IsWall(nx, ny)
-}
-
-func isReverse(a, b entities.Direction) bool {
-	return (a == entities.DirUp && b == entities.DirDown) ||
-		(a == entities.DirDown && b == entities.DirUp) ||
-		(a == entities.DirLeft && b == entities.DirRight) ||
-		(a == entities.DirRight && b == entities.DirLeft)
-}
-
-func reverseDir(a entities.Direction) entities.Direction {
-	switch a {
-	case entities.DirUp:
-		return entities.DirDown
-	case entities.DirDown:
-		return entities.DirUp
-	case entities.DirLeft:
-		return entities.DirRight
-	case entities.DirRight:
-		return entities.DirLeft
-	default:
-		return entities.DirLeft
+		g.easterUntilTick = g.tickCounter + updatesPerSecond*easterEggDuration
 	}
 }

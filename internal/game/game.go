@@ -29,7 +29,12 @@ const (
 	frightenedDurationUpdates  = 120 // 120 ticks = 2 seconds at 60 UPS
 
 	// Alignment and movement constants
-	alignmentThreshold = playerSpeedPixelsPerUpdate // 12 pixels - full movement speed for very responsive turning
+	// Alignment threshold for turn detection and auto-centering.
+	// Using a full step improves responsiveness at high speeds and low FPS.
+	alignmentThreshold = playerSpeedPixelsPerUpdate / 2 // 6 pixels at current speed
+	// Optional: hard snap to grid centers when crossing near an intersection
+	hardSnapEnabled = true
+	hardSnapEpsilon = 0.75
 
 	// Easter egg constants
 	easterEggChance     = 6000 // 1 in 6000 chance (~100 seconds at 60 UPS)

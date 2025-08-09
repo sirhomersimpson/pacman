@@ -12,6 +12,14 @@ func (g *Game) updatePlayerMovement() {
 	if g.player.DesiredDir != g.player.CurrentDir {
 		// Check if we can turn
 		if g.canTurn(g.player.DesiredDir) {
+			// Snap to grid center on the perpendicular axis to avoid drift
+			gx, gy := g.playerGrid()
+			cx, cy := g.cellCenter(gx, gy)
+			if g.player.DesiredDir == entities.DirUp || g.player.DesiredDir == entities.DirDown {
+				g.player.X = cx
+			} else if g.player.DesiredDir == entities.DirLeft || g.player.DesiredDir == entities.DirRight {
+				g.player.Y = cy
+			}
 			g.player.CurrentDir = g.player.DesiredDir
 		}
 	}
@@ -21,6 +29,41 @@ func (g *Game) updatePlayerMovement() {
 		dx, dy := entities.DirDelta(g.player.CurrentDir)
 		newX := g.player.X + float64(dx)*playerSpeedPixelsPerUpdate
 		newY := g.player.Y + float64(dy)*playerSpeedPixelsPerUpdate
+
+		// Auto-center on the perpendicular axis when close to center to prevent drift
+		gx, gy := g.playerGrid()
+		cx, cy := g.cellCenter(gx, gy)
+		if dx != 0 { // moving horizontally -> center Y
+			// Only center Y if close; do not over-constrain
+			if math.Abs(g.player.Y-cy) <= alignmentThreshold {
+				newY = cy
+			}
+			if hardSnapEnabled {
+				// Only snap X when we truly cross the exact center and are very close on Y
+				nextX := newX
+				if math.Abs(g.player.Y-cy) <= alignmentThreshold+hardSnapEpsilon {
+					if (g.player.X-cx) > 0 && (nextX-cx) < 0 {
+						newX = cx
+					} else if (g.player.X-cx) < 0 && (nextX-cx) > 0 {
+						newX = cx
+					}
+				}
+			}
+		} else if dy != 0 { // moving vertically -> center X
+			if math.Abs(g.player.X-cx) <= alignmentThreshold {
+				newX = cx
+			}
+			if hardSnapEnabled {
+				nextY := newY
+				if math.Abs(g.player.X-cx) <= alignmentThreshold+hardSnapEpsilon {
+					if (g.player.Y-cy) > 0 && (nextY-cy) < 0 {
+						newY = cy
+					} else if (g.player.Y-cy) < 0 && (nextY-cy) > 0 {
+						newY = cy
+					}
+				}
+			}
+		}
 
 		// Check if the move is valid
 		if g.isValidPosition(newX, newY) {
@@ -73,17 +116,39 @@ func (g *Game) canTurn(dir entities.Direction) bool {
 		return false
 	}
 
-	// For turning, require some alignment but be more lenient
+	// For turning, require some alignment but add overshoot detection to be responsive
 	cx, cy := g.cellCenter(gx, gy)
 
-	// For vertical turns, require reasonable horizontal alignment
+	// If requesting a vertical turn, check horizontal alignment or crossing of cell center
 	if dir == entities.DirUp || dir == entities.DirDown {
-		return math.Abs(g.player.X-cx) <= alignmentThreshold
+		if math.Abs(g.player.X-cx) <= alignmentThreshold {
+			return true
+		}
+		// If currently moving horizontally, detect if we'll cross the center next update
+		cdx, _ := entities.DirDelta(g.player.CurrentDir)
+		if cdx != 0 {
+			nextX := g.player.X + float64(cdx)*playerSpeedPixelsPerUpdate
+			// If the sign changes or we land exactly on center, allow the turn
+			if (g.player.X-cx)*(nextX-cx) <= 0 {
+				return true
+			}
+		}
+		return false
 	}
 
-	// For horizontal turns, require reasonable vertical alignment
+	// If requesting a horizontal turn, check vertical alignment or crossing of cell center
 	if dir == entities.DirLeft || dir == entities.DirRight {
-		return math.Abs(g.player.Y-cy) <= alignmentThreshold
+		if math.Abs(g.player.Y-cy) <= alignmentThreshold {
+			return true
+		}
+		_, cdy := entities.DirDelta(g.player.CurrentDir)
+		if cdy != 0 {
+			nextY := g.player.Y + float64(cdy)*playerSpeedPixelsPerUpdate
+			if (g.player.Y-cy)*(nextY-cy) <= 0 {
+				return true
+			}
+		}
+		return false
 	}
 
 	return true

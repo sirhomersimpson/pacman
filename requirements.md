@@ -197,7 +197,7 @@ The game should closely mimic the classic Pac-Man look and feel (grid layout, pe
 - **Easter Eggs**:
   - Name-based: Enter "Rekha" or "Roy" as name for special message
   - Key-based: Press 'R' or 'Y' during gameplay
-  - Random: ~1/100 second chance for surprise message
+  - Random: ~1/6000 chance per update (~100 second average) for surprise message
   - Messages appear in pink for 3 seconds
 - **Project Structure**: 
   - `cmd/pacman`: Entry point
@@ -206,6 +206,7 @@ The game should closely mimic the classic Pac-Man look and feel (grid layout, pe
   - `internal/tilemap`: Maze rendering and tile management
   - `internal/ui`: HUD utilities
   - `assets/sounds/`: Audio files (currently empty)
+  - `CLAUDE.md`: AI development assistant instructions with detailed architecture
 - **Build tooling**: 
   - Makefile with `deps`, `build`, `run`, `test`, `coverage`, `coverage-html`, `release` targets
   - Cross-platform builds for Linux, macOS, Windows
@@ -217,8 +218,11 @@ The game should closely mimic the classic Pac-Man look and feel (grid layout, pe
 - **Ghost Speed**: 630 pixels/second (10.5 pixels per update)  
 - **Frightened Duration**: 120 ticks (2 seconds at 60 UPS)
 - **Lives**: 3 lives, position reset on death
-- **Alignment Threshold**: 6 pixels (playerSpeed/2) for responsive turning
+- **Alignment Threshold**: 6 pixels (`playerSpeedPixelsPerUpdate/2`) for responsive turning
 - **High Score Storage**: `$HOME/.config/pacman/highscore.json` (or `PACMAN_CONFIG_DIR`)
+
+### Known Issues
+- **Current Issue**: Up/down arrow keys experiencing responsiveness issues (partial fixes attempted)
 
 ### Bug Fixes
 - **Fixed**: Movement keys not responding when game paused or showing leaderboard
@@ -226,6 +230,7 @@ The game should closely mimic the classic Pac-Man look and feel (grid layout, pe
 - **Fixed**: Frightened mode timer expiring correctly after timeout
 
 ### Next Up
+- **Priority**: Fix up/down arrow key responsiveness issues
 - Ghost AI with pathfinding (Milestone 4) - Implement chase/scatter modes
 - Fruits and level progression (Milestone 6)
 - Actual sound file assets

@@ -85,7 +85,7 @@ If files are missing, the game synthesizes simple beep sounds as fallbacks.
 ### Easter Eggs
 - **Name-based**: Enter "Rekha" or "Roy" as your name for a special message
 - **Key-based**: Press 'R' or 'Y' during gameplay for instant messages
-- **Random**: ~1% chance every 100 seconds for surprise messages
+- **Random**: ~1/6000 chance per update (~100 second average) for surprise messages
 - All messages appear in pink for 3 seconds
 
 ## Development
@@ -103,6 +103,9 @@ make fmt    # Format code
 make vet    # Run go vet
 make deps   # Update dependencies
 ```
+
+### AI Development Assistant
+This project includes `CLAUDE.md` with detailed architecture documentation and common commands for AI assistants like Claude Code. It contains precise technical specifications for the movement system, timer mechanics, and development workflows.
 
 ### Cross-Platform Builds
 ```bash
@@ -124,6 +127,7 @@ make build-windows  # Windows build
 ├── assets/
 │   └── sounds/         # Audio files (currently empty)
 ├── Makefile           # Build automation
+├── CLAUDE.md          # AI development assistant instructions
 └── requirements.md    # Detailed implementation status
 ```
 
@@ -132,14 +136,18 @@ make build-windows  # Windows build
 - **Game Speed**: 60 updates per second (UPS)
 - **Player Speed**: 720 pixels/second (1.5× original speed)
 - **Ghost Speed**: 630 pixels/second (1.5× original speed)
-- **Movement**: Grid-based with 6-pixel alignment threshold for responsive turning
+- **Movement**: Grid-based with 6-pixel alignment threshold (`playerSpeedPixelsPerUpdate/2`) for responsive turning
 - **Resolution**: Native 28×31 tile maze, auto-scaled to fit ~75% of display
 - **Persistence**: High scores stored in OS user config directory
 
-## Recent Bug Fixes
+## Known Issues & Recent Fixes
 
+### Current Issues
+- ⚠️ **Known Issue**: Up/down arrow keys experiencing responsiveness issues (in progress)
+
+### Recent Bug Fixes
 - ✅ **Fixed**: Movement keys not responding when game paused or showing leaderboard
-- ✅ **Fixed**: Direction changes not registering until hitting wall (improved alignment detection)
+- ✅ **Fixed**: Direction changes not registering until hitting wall (improved alignment detection)  
 - ✅ **Fixed**: Frightened mode timer expiring correctly after timeout
 
 ## License
